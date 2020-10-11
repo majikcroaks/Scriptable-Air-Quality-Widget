@@ -1,13 +1,13 @@
 # Scriptable-Air-Quality-Widget
 Airquality widget for scriptable app on iOS 14
 
-1. 安裝Scriptable App
+1. 在iPhone上安裝Scriptable App
 https://apps.apple.com/tw/app/scriptable/id1405459188
 
 2. 將Javascript檔(.js)複製到iCloud的Scriptable資料夾
 或在Scriptable App裡面新增一個Script並將JS檔內容貼到script內
 
-``` javascript
+<pre><code>
 // Variables used by Scriptable.
 // These must be at the very top of the file. Do not edit.
 // icon-color: deep-green; icon-glyph: leaf;
@@ -187,4 +187,4 @@ function getLevel(pm25) {
     Script.setWidget(wg);
     Script.complete();
 }();
-```
+</pre></code>

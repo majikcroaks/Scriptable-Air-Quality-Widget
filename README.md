@@ -7,6 +7,16 @@ https://apps.apple.com/tw/app/scriptable/id1405459188
 2. 將Javascript檔(.js)複製到iCloud的Scriptable資料夾
 或在Scriptable App裡面新增一個Script並將JS檔內容貼到script內
 
+3. 執行一次剛剛新增的script.
+
+4. 新增小工具到桌面
+
+5. 長按小工具，選編輯小工具
+
+6. 第一個選項選擇剛剛的script
+
+7. 其餘的不動 完成
+
 <pre><code>
 // Variables used by Scriptable.
 // These must be at the very top of the file. Do not edit.

@@ -17,7 +17,7 @@ async function loadSensor() {
         await fm.downloadFileFromiCloud(path);
         let sensorFile = Data.fromFile(path);
         sensor = JSON.parse(sensorFile.toRawString());
-        if (isNotEmpty(sensor.device_id)) {
+        if (sensor.device_id != null && sensor.device_id.length > 0) {
             return sensor.device_id;
         }
     }
@@ -31,7 +31,7 @@ async function getSensorList() {
     let lat = location.latitude;
     let lon = location.longitude;
     console.log(`lat: ${lat}, lon: ${lon}`);
-    // Get nearest sensors list from current coordinates.
+    //Get nearest sensors list from current coordinates.
     console.log("Fetching nearest sensor list...");
     let deviceList = `${API_URL}device/nearest/lat/${lat}/lon/${lon}/`;
     let getSensorList = new Request(deviceList);
@@ -80,49 +80,43 @@ function getLevel(pm25) {
         return {
             threshold: 15,
             label: "良好",
-            startColor: "00e400",
-            endColor: "00bb00",
-            textColor: "000000",
+            background: "00E67E",
+            textColor: "1a1a1a",
         };
     } else if (pm25 <= 35) {
         return {
             threshold: 35,
             label: "普通",
-            startColor: "ffff00",
-            endColor: "cccc00",
-            textColor: "000000",
+            background: "ffeb00",
+            textColor: "1a1a1a",
         };
     } else if (pm25 <= 54) {
         return {
             threshold: 54,
             label: "對敏感族群不健康",
-            startColor: "FFA63D",
-            endColor: "D67200",
-            textColor: "000000",
+            background: "ffb494",
+            textColor: "1a1a1a",
         };
     } else if (pm25 <= 150) {
         return {
             threshold: 150,
             label: "不健康",
-            startColor: "FF3D3D",
-            endColor: "D60000",
-            textColor: "000000",
+            background: "f8b4ba",
+            textColor: "1a1a1a",
         };
     } else if (pm25 <= 250) {
         return {
             threshold: 250,
             label: "非常不健康",
-            startColor: "8f3f97",
-            endColor: "6f1f77",
-            textColor: "ffffff",
+            background: "e6b7d2",
+            textColor: "1a1a1a",
         };
     } else if (pm25 <= 999 || pm25 > 999) {
         return {
             threshold: 999,
             label: "有害",
-            startColor: "9e2043",
-            endColor: "7e0023",
-            textColor: "ffffff",
+            background: "8B0000",
+            textColor: "f2f2f2",
         };
     }
     return result;
@@ -140,10 +134,12 @@ function getLevel(pm25) {
         let pm25 = data.pm25;
         let name = data.name;
         let level = getLevel(pm25);
-        let textColor = '112A46';
+        let TC = level.textColor;
+        let BG = level.background;
+
         console.log(level);
 
-        let startColor = new Color(level.startColor);
+        /* let startColor = new Color(level.startColor);
         let endColor = new Color(level.endColor);
         let gradient = new LinearGradient({
             colors: [startColor, endColor],
@@ -151,34 +147,35 @@ function getLevel(pm25) {
         });
         console.log(gradient);
 
-        wg.backgoundGradient = gradient;
-        wg.backgroundColor = new Color('F7F7F7');
+        wg.backgoundGradient = gradient; */
+        wg.backgroundColor = new Color(BG);
 
-        let header = wg.addText(`${level.label}`);
-        header.textColor = new Color(textColor);
-        header.font = Font.boldSystemFont(15);
+        let header = wg.addText(level.label);
+        header.textColor = new Color(TC);
+        header.font = Font.boldSystemFont(14);
 
         wg.addSpacer(10);
+        wg.addSpacer(10);
 
-        let content = wg.addText(`粉塵 ${pm25} ug/m3`);
-        content.textColor = new Color(textColor);
+        let content = wg.addText(`每立方米${pm25}ug`);
+        content.textColor = new Color(TC);
         content.font = Font.regularSystemFont(12);
 
 
         let wordTemp = wg.addText(`${temp} °C`);
-        wordTemp.textColor = new Color(textColor);
+        wordTemp.textColor = new Color(TC);
         wordTemp.font = Font.regularSystemFont(12);
 
         let wordRH = wg.addText(`RH ${RH}%`);
-        wordRH.textColor = new Color(textColor);
+        wordRH.textColor = new Color(TC);
         wordRH.font = Font.regularSystemFont(12);
 
         wg.addSpacer(10);
         wg.addSpacer(10);
 
         let id = wg.addText(name);
-        id.textColor = new Color(textColor);
-        id.font = Font.mediumSystemFont(12);
+        id.textColor = new Color(TC);
+        id.font = Font.mediumSystemFont(10);
 
         let updatedAt = new Date(data.timestamp).toLocaleDateString('en-US', {
             timeZone: "GMT",
@@ -190,7 +187,7 @@ function getLevel(pm25) {
         });
         console.log(updatedAt);
         let ts = wg.addText(`${updatedAt}`);
-        ts.textColor = new Color(textColor);
+        ts.textColor = new Color(TC);
         ts.font = Font.lightSystemFont(10);
 
         //let purpleMap = 'https://www.purpleair.com/map?opt=1/i/mAQI/a10/cC0&select=' + SENSOR_ID + '#14/' + data.lat + '/' + data.lon

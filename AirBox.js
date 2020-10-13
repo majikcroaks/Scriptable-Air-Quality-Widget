@@ -178,7 +178,7 @@ function getLevel(pm25) {
         id.font = Font.mediumSystemFont(10);
 
         let updatedAt = new Date(data.timestamp).toLocaleDateString('en-US', {
-            timeZone: "GMT",
+            timeZone: "Asia/Taipei",
             year: "numeric",
             month: "short",
             day: "numeric",

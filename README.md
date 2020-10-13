@@ -4,11 +4,11 @@ Airquality widget for scriptable app on iOS 14
 1. 在iPhone上安裝Scriptable App
 https://apps.apple.com/tw/app/scriptable/id1405459188
 
-2. 安裝捷徑來儲存Widget程式碼.
-https://www.icloud.com/shortcuts/b0a125257c89485ea4748118bf7bb86c
+2. 安裝捷徑來儲存Widget程式碼，執行後存到Scriptable資料夾
+https://routinehub.co/shortcut/7028/
 
-3. 安裝下方捷徑來取得最近的AirBox監測站ID.(每次到新的地區都需執行此捷徑來取得最近的監測站
-https://www.icloud.com/shortcuts/553b7389cb824bba9c7ec1e9079c9ad5
+3. 安裝下方捷徑來取得最近的AirBox監測站ID，執行後存到Scriptable資料夾(每次到新的地區都需執行此捷徑來取得最近的監測站
+https://routinehub.co/shortcut/7029/
 
 4. 執行一次剛剛新增的 Widget 程式碼 (為了取得權限)
 

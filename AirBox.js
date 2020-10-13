@@ -25,6 +25,14 @@ async function loadSensor() {
 }
 
 async function getSensorList() {
+    //Define save directory.
+    let fm = FileManager.iCloud();
+    let dir = fm.documentsDirectory();
+    let path = fm.joinPath(dir, "sensor.json");
+    let sensorJSON = {
+        device_id: ""
+    };
+
     //Get coordinates.
     console.log("Getting coordinates...");
     const location = await Location.current();
@@ -44,6 +52,11 @@ async function getSensorList() {
         ID.push(Object.keys(sensor)[0]);
         console.log(`Sensor ${i+1}: ${Object.keys(sensor)[0]}`);
     }
+    //Store sensor ID
+    sensorJSON.device_id = ID[0];
+    sensorStr = JSON.stringify(sensorJSON);
+    fm.writeString(path, sensorStr);
+    console.log(`Saved: ${sensorStr}`);
     //Return first sensor, which is the nearest one.
     return ID[0];
 }
@@ -203,7 +216,8 @@ function getLevel(pm25) {
 
     }
 
-    wg.presentSmall();
+    //QuickLook in small widget.
+    //wg.presentSmall();
     Script.setWidget(wg);
     Script.complete();
 }();

@@ -1,5 +1,8 @@
 // Variables used by Scriptable.
 // These must be at the very top of the file. Do not edit.
+// icon-color: brown; icon-glyph: magic;
+// Variables used by Scriptable.
+// These must be at the very top of the file. Do not edit.
 // icon-color: deep-green; icon-glyph: leaf;
 // Based on code by Jason Snell <jsnell@sixcolors.com>, Matt Silverlock
 // Inspired and based on Apple Shortcuts by jickey@PTT-iOS
@@ -76,7 +79,9 @@ async function getSensorData() {
         RH: data.s_h0,
         pm25: data.s_d0,
         name: data.SiteName,
-        timestamp: data.timestamp
+        timestamp: data.timestamp,
+        lat: data.gps_lat,
+        lon: data.gps_lon
     };
 }
 
@@ -142,10 +147,12 @@ function getLevel(pm25) {
         //Get data from getSensorData().
         let data = await getSensorData();
         console.log(data);
+        let place = await Location.reverseGeocode(data.lat, data.lon,'zh-TW');
+        console.log(place);
         let temp = data.temp;
         let RH = data.RH;
         let pm25 = data.pm25;
-        let name = data.name;
+        let name = `${place[0].subAdministrativeArea}${place[0].locality}`;
         let level = getLevel(pm25);
         let TC = level.textColor;
         let BG = level.background;
@@ -170,7 +177,7 @@ function getLevel(pm25) {
         wg.addSpacer(10);
         wg.addSpacer(10);
 
-        let content = wg.addText(`每立方米${pm25}ug`);
+        let content = wg.addText(`每立方米 ${pm25}ug`);
         content.textColor = new Color(TC);
         content.font = Font.regularSystemFont(12);
 

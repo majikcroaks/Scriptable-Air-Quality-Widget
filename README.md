@@ -17,19 +17,48 @@ https://routinehub.co/shortcut/7028/
 
 8. 其餘的不動 完成
 
-<pre><code>
+``` Javascript
 // Variables used by Scriptable.
-// These must be at the very top of the file. Do not edit.
 // icon-color: deep-green; icon-glyph: leaf;
-// Based on code by Jason Snell , Matt Silverlock
-// Inspired by and based on Apple Shortcuts by jickey@PTT-iOS
+// Based on code from Jason Snell , Matt Silverlock
+// Inspired by Apple Shortcuts from jickey@PTT-iOS
 // API powered by Location Aware Sensing System (LASS) and IIS-NRL, Academia Sinica 
 
 const API_URL = "https://pm25.lass-net.org/API-1.0.0/";
 const AIRBOX_FALLBACK_FEED_URL = "https://pm25.lass-net.org/AirBox/other.json";
+const FALLBACK_CANDIDATE_LIMIT = 5;
+const FEED_CACHE_TTL_MS = 5 * 60 * 1000;
+const LAST_GOOD_DEVICE_TTL_MS = 30 * 60 * 1000;
+const CACHE_KEY_PREFIX = "air_widget_cache_v1";
+const FEED_CACHE_KEY = `${CACHE_KEY_PREFIX}_feed`;
+const LAST_GOOD_DEVICE_KEY = `${CACHE_KEY_PREFIX}_last_good`;
+let memoryFeedCache = null;
 
 function roundToDecimals(value, decimals) {
     return Number(value.toFixed(decimals));
+}
+
+function smartShortenSiteName(name, maxLen = 12) {
+    if (!name) return "未知站點";
+
+    let s = String(name);
+    s = s
+        .replace(/（[^）]*）/g, "")
+        .replace(/\([^)]*\)/g, "")
+        .replace(/【[^】]*】/g, "")
+        .replace(/\[[^\]]*\]/g, "");
+
+    s = s.replace(/區段標|第一期工程|第二期工程|工程|計畫|工區|案/g, "");
+
+    s = s
+        .replace(/\s+/g, " ")
+        .replace(/[-–—]{2,}/g, "-")
+        .replace(/\s*-\s*/g, "-")
+        .trim();
+
+    if (!s) s = "未知站點";
+    if (s.length > maxLen) s = `${s.slice(0, maxLen)}…`;
+    return s;
 }
 
 async function getCurrentCoordinates() {
@@ -93,61 +122,43 @@ async function getNearestDeviceId(lat, lon) {
         const req = new Request(url);
         req.headers = { Accept: "application/json" };
         try {
-            const payload = await req.loadJSON();
+            // Use one request per URL and parse tolerantly from raw text.
+            const rawText = await req.loadString();
+            if (!rawText || rawText.trim().length === 0) {
+                console.log(`Nearest endpoint empty body on ${url}`);
+                continue;
+            }
+
+            const normalizedText = rawText.trim().replace(/^\)\]\}',?\s*/, "");
+            let payload = null;
+            try {
+                payload = JSON.parse(normalizedText);
+            } catch (parseError) {
+                payload = null;
+            }
+
             const nearestDeviceId = extractDeviceIdFromNearestPayload(payload);
             if (nearestDeviceId) {
                 console.log(`Using nearest sensor: ${nearestDeviceId}`);
                 return nearestDeviceId;
             }
-        } catch (jsonError) {
-            try {
-                const rawReq = new Request(url);
-                rawReq.headers = { Accept: "application/json" };
-                const rawText = await rawReq.loadString();
-                if (!rawText || rawText.trim().length === 0) {
-                    console.log(`Nearest endpoint empty body on ${url}`);
-                    continue;
-                }
 
-                const normalizedText = rawText.trim().replace(/^\)\]\}',?\s*/, "");
-                let parsed = null;
-                try {
-                    parsed = JSON.parse(normalizedText);
-                } catch (parseError) {
-                    parsed = null;
-                }
-
-                const nearestDeviceId = extractDeviceIdFromNearestPayload(parsed);
-                if (nearestDeviceId) {
-                    console.log(`Using nearest sensor: ${nearestDeviceId}`);
-                    return nearestDeviceId;
-                }
-
-                const byField = normalizedText.match(/"device_id"\s*:\s*"([^"]+)"/i);
-                if (byField && byField[1]) {
-                    console.log(`Using nearest sensor (regex device_id): ${byField[1]}`);
-                    return byField[1];
-                }
-                const byKey = normalizedText.match(/\{\s*"([0-9A-F]{8,})"\s*:\s*\{/i);
-                if (byKey && byKey[1]) {
-                    console.log(`Using nearest sensor (regex key): ${byKey[1]}`);
-                    return byKey[1];
-                }
-            } catch (rawError) {
-                console.log(`Nearest endpoint parse failed on ${url}: ${rawError}`);
+            const byField = normalizedText.match(/"device_id"\s*:\s*"([^"]+)"/i);
+            if (byField && byField[1]) {
+                console.log(`Using nearest sensor (regex device_id): ${byField[1]}`);
+                return byField[1];
             }
-            console.log(`Nearest endpoint JSON parse failed on ${url}: ${jsonError}`);
+            const byKey = normalizedText.match(/\{\s*"([0-9A-F]{8,})"\s*:\s*\{/i);
+            if (byKey && byKey[1]) {
+                console.log(`Using nearest sensor (regex key): ${byKey[1]}`);
+                return byKey[1];
+            }
+        } catch (error) {
+            console.log(`Nearest endpoint request/parse failed on ${url}: ${error}`);
         }
     }
 
-    console.log("Falling back to AirBox feed distance lookup...");
-    const fallbackDeviceId = await getNearestDeviceIdFromFeed(lat, lon);
-    if (fallbackDeviceId) {
-        console.log(`Using nearest sensor (fallback feed): ${fallbackDeviceId}`);
-        return fallbackDeviceId;
-    }
-
-    throw new Error("No nearby AirBox device found or nearest endpoint response is invalid.");
+    return null;
 }
 
 function toRad(value) {
@@ -166,66 +177,64 @@ function calcDistanceKm(lat1, lon1, lat2, lon2) {
     return earthRadiusKm * c;
 }
 
-async function getNearestDeviceIdFromFeed(lat, lon) {
-    const req = new Request(AIRBOX_FALLBACK_FEED_URL);
-    req.headers = { Accept: "application/json" };
-    let payload;
+function setJsonCache(key, value) {
     try {
-        payload = await req.loadJSON();
+        Keychain.set(key, JSON.stringify(value));
     } catch (e) {
-        console.log(`Fallback feed JSON parse failed: ${e}`);
-        return null;
+        console.log(`Cache write skipped for ${key}: ${e}`);
     }
-
-    const feeds = payload && Array.isArray(payload.feeds) ? payload.feeds : [];
-    if (feeds.length === 0) {
-        console.log("Fallback feed has no sensors.");
-        return null;
-    }
-
-    let bestDeviceId = null;
-    let bestDistanceKm = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < feeds.length; i++) {
-        const sensor = feeds[i];
-        const sensorLat = Number(sensor.gps_lat);
-        const sensorLon = Number(sensor.gps_lon);
-        if (Number.isNaN(sensorLat) || Number.isNaN(sensorLon)) {
-            continue;
-        }
-        const deviceId = String(sensor.site_id || sensor.device_id || "").trim();
-        if (!deviceId) {
-            continue;
-        }
-
-        const distanceKm = calcDistanceKm(lat, lon, sensorLat, sensorLon);
-        if (distanceKm < bestDistanceKm) {
-            bestDistanceKm = distanceKm;
-            bestDeviceId = deviceId;
-        }
-    }
-
-    if (!bestDeviceId) {
-        console.log("Fallback feed cannot resolve any valid device_id.");
-        return null;
-    }
-    console.log(`Fallback nearest distance: ${bestDistanceKm.toFixed(3)} km`);
-    return bestDeviceId;
 }
 
-async function getNearestDeviceIdsFromFeed(lat, lon, limit) {
+function getJsonCache(key) {
+    try {
+        if (!Keychain.contains(key)) return null;
+        const raw = Keychain.get(key);
+        if (!raw) return null;
+        return JSON.parse(raw);
+    } catch (e) {
+        console.log(`Cache read skipped for ${key}: ${e}`);
+        return null;
+    }
+}
+
+function isFreshCache(cacheObj, ttlMs) {
+    if (!cacheObj || typeof cacheObj !== "object") return false;
+    if (typeof cacheObj.cachedAt !== "number") return false;
+    return (Date.now() - cacheObj.cachedAt) <= ttlMs;
+}
+
+async function getFallbackFeedData() {
+    if (isFreshCache(memoryFeedCache, FEED_CACHE_TTL_MS) && Array.isArray(memoryFeedCache.feeds)) {
+        return memoryFeedCache.feeds;
+    }
+
+    const diskCache = getJsonCache(FEED_CACHE_KEY);
+    if (isFreshCache(diskCache, FEED_CACHE_TTL_MS) && Array.isArray(diskCache.feeds)) {
+        memoryFeedCache = diskCache;
+        return diskCache.feeds;
+    }
+
     const req = new Request(AIRBOX_FALLBACK_FEED_URL);
     req.headers = { Accept: "application/json" };
     let payload;
     try {
         payload = await req.loadJSON();
     } catch (e) {
-        console.log(`Fallback feed candidate parse failed: ${e}`);
+        console.log(`Fallback feed parse failed: ${e}`);
         return [];
     }
 
     const feeds = payload && Array.isArray(payload.feeds) ? payload.feeds : [];
     if (feeds.length === 0) return [];
+    const cachePayload = { cachedAt: Date.now(), feeds };
+    memoryFeedCache = cachePayload;
+    setJsonCache(FEED_CACHE_KEY, cachePayload);
+    return feeds;
+}
 
+async function getFallbackNearestIds(lat, lon, limit) {
+    const feeds = await getFallbackFeedData();
+    if (feeds.length === 0) return [];
     const withDistance = [];
     for (let i = 0; i < feeds.length; i++) {
         const sensor = feeds[i];
@@ -248,6 +257,9 @@ async function getNearestDeviceIdsFromFeed(lat, lon, limit) {
         seen.add(id);
         ids.push(id);
         if (ids.length >= limit) break;
+    }
+    if (withDistance.length > 0) {
+        console.log(`Fallback nearest distance: ${withDistance[0].distanceKm.toFixed(3)} km`);
     }
     return ids;
 }
@@ -296,17 +308,51 @@ async function fetchLatestDataByDeviceId(deviceId) {
     return data;
 }
 
+function getLastGoodDeviceId() {
+    const cached = getJsonCache(LAST_GOOD_DEVICE_KEY);
+    if (!isFreshCache(cached, LAST_GOOD_DEVICE_TTL_MS)) return null;
+    if (!cached.deviceId || typeof cached.deviceId !== "string") return null;
+    return cached.deviceId;
+}
+
+function setLastGoodDeviceId(deviceId) {
+    setJsonCache(LAST_GOOD_DEVICE_KEY, {
+        cachedAt: Date.now(),
+        deviceId
+    });
+}
+
 //Get sensor data.
 async function getSensorData() {
     const { lat, lon } = await getCurrentCoordinates();
-    const firstDeviceId = await getNearestDeviceId(lat, lon);
-    const candidates = [firstDeviceId];
+    const candidates = [];
+    const seenCandidates = new Set();
+    const pushCandidate = (id) => {
+        if (!id || typeof id !== "string") return;
+        if (seenCandidates.has(id)) return;
+        seenCandidates.add(id);
+        candidates.push(id);
+    };
 
-    // Add more nearby candidates for automatic failover when primary has bad values.
-    const fallbackCandidates = await getNearestDeviceIdsFromFeed(lat, lon, 10);
+    // 1) Prioritize last known good device for faster success path.
+    const lastGoodDeviceId = getLastGoodDeviceId();
+    if (lastGoodDeviceId) {
+        console.log(`Trying last known good sensor first: ${lastGoodDeviceId}`);
+        pushCandidate(lastGoodDeviceId);
+    }
+
+    // 2) Try nearest endpoint (may return null/empty body).
+    const nearestDeviceId = await getNearestDeviceId(lat, lon);
+    if (nearestDeviceId) {
+        pushCandidate(nearestDeviceId);
+    } else {
+        console.log("Nearest endpoint unavailable, switching to feed fallback.");
+    }
+
+    // 3) Add nearby fallback candidates from one shared feed fetch.
+    const fallbackCandidates = await getFallbackNearestIds(lat, lon, FALLBACK_CANDIDATE_LIMIT);
     for (let i = 0; i < fallbackCandidates.length; i++) {
-        const id = fallbackCandidates[i];
-        if (!candidates.includes(id)) candidates.push(id);
+        pushCandidate(fallbackCandidates[i]);
     }
 
     let lastError = null;
@@ -322,6 +368,7 @@ async function getSensorData() {
             if (i > 0) {
                 console.log(`Switched to fallback sensor with valid data: ${deviceId}`);
             }
+            setLastGoodDeviceId(deviceId);
             return {
                 temp: data.s_t0,
                 RH: data.s_h0,
@@ -411,43 +458,41 @@ function getLevel(pm25) {
         let level = getLevel(pm25);
         let textColor = level.textColor || '112A46';
         console.log(level);
-
-        //let startColor = new Color(level.startColor);
-        //let endColor = new Color(level.endColor);
-        //let gradient = new LinearGradient({
-        //    colors: [startColor, endColor],
-        //    locations: [0, 1]
-        //});
-        //console.log(gradient);
-
-        //wg.backgoundGradient = gradient;
         wg.backgroundColor = new Color(level.backgroundColor || 'F7F7F7');
 
+        // Top block: AQ label + PM2.5 + met data
         let header = wg.addText(`${level.label}`);
         header.textColor = new Color(textColor);
-        header.font = Font.boldSystemFont(15);
+        header.font = Font.boldSystemFont(14);
+        header.lineLimit = 1;
 
-        wg.addSpacer(10);
+        wg.addSpacer(4);
 
-        let content = wg.addText(`粉塵 ${pm25} ug/m3`);
-        content.textColor = new Color(textColor);
-        content.font = Font.regularSystemFont(12);
+        // Line 2: PM2.5 large number
+        let pmLine = wg.addText(`${pm25}`);
+        pmLine.textColor = new Color(textColor);
+        pmLine.font = Font.boldSystemFont(28);
+        pmLine.lineLimit = 1;
 
+        wg.addSpacer(4);
 
-        let wordTemp = wg.addText(`${temp}°C`);
-        wordTemp.textColor = new Color(textColor);
-        wordTemp.font = Font.regularSystemFont(12);
+        // Line 3: temperature / humidity
+        let metLine = wg.addText(`${temp}°C / RH ${RH}%`);
+        metLine.textColor = new Color(textColor);
+        metLine.font = Font.regularSystemFont(11);
+        metLine.lineLimit = 1;
 
-        let wordRH = wg.addText(`RH ${RH}%`);
-        wordRH.textColor = new Color(textColor);
-        wordRH.font = Font.regularSystemFont(12);
+        // Flexible spacer to avoid visual crowding in small widget.
+        wg.addSpacer();
 
-        wg.addSpacer(10);
-        wg.addSpacer(10);
+        // Bottom block: site + update time
+        let displayName = smartShortenSiteName(name, 12);
+        let siteLine = wg.addText(displayName);
+        siteLine.textColor = new Color(textColor);
+        siteLine.font = Font.mediumSystemFont(11);
+        siteLine.lineLimit = 1;
 
-        let id = wg.addText(name);
-        id.textColor = new Color(textColor);
-        id.font = Font.mediumSystemFont(12);
+        wg.addSpacer(3);
 
         let updatedAt = new Date(data.timestamp).toLocaleDateString('en-US', {
             timeZone: "GMT",
@@ -458,13 +503,11 @@ function getLevel(pm25) {
             minute: '2-digit'
         });
         console.log(updatedAt);
+        // Line 5: update time (tiny)
         let ts = wg.addText(`${updatedAt}`);
         ts.textColor = new Color(textColor);
-        ts.font = Font.lightSystemFont(10);
-
-        //let purpleMap = 'https://www.purpleair.com/map?opt=1/i/mAQI/a10/cC0&select=' + SENSOR_ID + '#14/' + data.lat + '/' + data.lon
-
-        //wg.url = purpleMap
+        ts.font = Font.lightSystemFont(9);
+        ts.lineLimit = 1;
 
     } catch (e) {
         console.log(e);
@@ -479,4 +522,4 @@ function getLevel(pm25) {
     Script.setWidget(wg);
     Script.complete();
 }();
-</pre></code>
+```

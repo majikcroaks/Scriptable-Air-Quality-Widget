@@ -20,20 +20,10 @@ https://routinehub.co/shortcut/7028/
 <pre><code>
 // Variables used by Scriptable.
 // These must be at the very top of the file. Do not edit.
-// icon-color: light-brown; icon-glyph: magic;
-// Variables used by Scriptable.
-// These must be at the very top of the file. Do not edit.
-// icon-color: light-brown; icon-glyph: magic;
-// Variables used by Scriptable.
-// These must be at the very top of the file. Do not edit.
-// icon-color: light-brown; icon-glyph: magic;
-
-// Variables used by Scriptable.
-// These must be at the very top of the file. Do not edit.
 // icon-color: deep-green; icon-glyph: leaf;
 // Based on code by Jason Snell , Matt Silverlock
-// Inspired and based on Apple Shortcuts by jickey@PTT-iOS
-// API powered by Powered by Location Aware Sensing System (LASS) and IIS-NRL, Academia Sinica 
+// Inspired by and based on Apple Shortcuts by jickey@PTT-iOS
+// API powered by Location Aware Sensing System (LASS) and IIS-NRL, Academia Sinica 
 
 const API_URL = "https://pm25.lass-net.org/API-1.0.0/";
 const AIRBOX_FALLBACK_FEED_URL = "https://pm25.lass-net.org/AirBox/other.json";
